@@ -1,4 +1,3 @@
-import React from 'react'
 import { ContactButton } from './components'
 
 export const Overview=()=> {
