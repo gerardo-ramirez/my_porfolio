@@ -1,3 +1,4 @@
+import { Content } from '../content'
 import { ContactButton } from './components'
 
 export const Overview=()=> {
@@ -7,6 +8,7 @@ export const Overview=()=> {
       <div>
         <ContactButton/>
       </div>
+      <Content/>
     </div>
   )
 }

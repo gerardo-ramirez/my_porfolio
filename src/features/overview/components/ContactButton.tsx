@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components"
 
 export const ContactButton = () => {
   const phoneNumber =  import.meta.env.VITE_WHATSAPP_NUMBER; 

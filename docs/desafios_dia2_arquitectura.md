@@ -27,6 +27,16 @@ src/
 
   .
 
+###Pasamos de tener un proyecto local a tener una infraestructura profesional de despliegue continuo. Configuramos:
+
+UI System: Shadcn + Tailwind.
+
+Security: Variables de entorno (Secrets).
+
+DevOps: GitHub + Vercel (CI/CD).
+
+Clean Code: Resolución de tipos y eliminación de código muerto.
+
 ## 🏁 Estado actual del proyecto:
 Arquitectura: Features encapsuladas con Barrel Pattern.
 
