@@ -1,14 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// Usamos las variables de entorno que configuraremos en Vercel
+// Configuración de Supabase
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL || '',
   process.env.VITE_SUPABASE_ANON_KEY || ''
-); 
+);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Aquí el BFF consulta a Supabase
+  // 1. Consulta a Supabase
   const { data, error } = await supabase
     .from('content')
     .select('*');
@@ -17,17 +17,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: error.message });
   }
 
-  // El BFF puede transformar los datos antes de enviarlos
-  // Por ejemplo, podríamos agregar la URL de la miniatura de YouTube aquí mismo
+  // 2. Transformación y Sanitización de datos (La "Magia" del BFF)
   const enhancedData = data.map(item => {
+    // A. Limpiamos la URL de cualquier carácter invisible como \r o \n
+    const sanitizedUrl = item.url ? item.url.trim() : null;
+
+    // B. Si es YouTube, generamos la miniatura
     if (item.type === 'youtube') {
       return {
         ...item,
+        url: sanitizedUrl,
         thumbnail: `https://img.youtube.com/vi/${item.external_id}/hqdefault.jpg`
       };
     }
-    return item;
+
+    // C. Para el resto (audios, imágenes), devolvemos el item con la URL limpia
+    return {
+      ...item,
+      url: sanitizedUrl
+    };
   });
 
+  // 3. Respuesta final con datos impecables
   return res.status(200).json(enhancedData);
 }
