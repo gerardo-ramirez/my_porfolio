@@ -1,6 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+// 1. Definimos los headers de CORS para que el navegador confíe en el BFF
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+};
+
 // Configuración de Supabase
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL || '',
@@ -8,36 +15,47 @@ const supabase = createClient(
 );
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // 1. Consulta a Supabase
-  const { data, error } = await supabase
-    .from('content')
-    .select('*');
-
-  if (error) {
-    return res.status(500).json({ error: error.message });
+  
+  // 2. Manejo del PREFLIGHT (Obligatorio para evitar errores de bloqueo en el navegador)
+  if (req.method === 'OPTIONS') {
+    return res.status(200).set(corsHeaders).send('ok');
   }
 
-  // 2. Transformación y Sanitización de datos (La "Magia" del BFF)
-  const enhancedData = data.map(item => {
-    // A. Limpiamos la URL de cualquier carácter invisible como \r o \n
-    const sanitizedUrl = item.url ? item.url.trim() : null;
+  try {
+    // Aplicamos los headers a la respuesta final
+    res.set(corsHeaders);
 
-    // B. Si es YouTube, generamos la miniatura
-    if (item.type === 'youtube') {
-      return {
-        ...item,
-        url: sanitizedUrl,
-        thumbnail: `https://img.youtube.com/vi/${item.external_id}/hqdefault.jpg`
-      };
+    // 3. Consulta a Supabase
+    const { data, error } = await supabase
+      .from('content')
+      .select('*');
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
     }
 
-    // C. Para el resto (audios, imágenes), devolvemos el item con la URL limpia
-    return {
-      ...item,
-      url: sanitizedUrl
-    };
-  });
+    // 4. Transformación y Sanitización de datos
+    const enhancedData = data.map(item => {
+      // Limpiamos la URL de saltos de línea y aplicamos encodeURI para manejar espacios
+      const sanitizedUrl = item.url ? encodeURI(item.url.trim()) : null;
 
-  // 3. Respuesta final con datos impecables
-  return res.status(200).json(enhancedData);
+      if (item.type === 'youtube') {
+        return {
+          ...item,
+          url: sanitizedUrl,
+          thumbnail: `https://img.youtube.com/vi/${item.external_id}/hqdefault.jpg`
+        };
+      }
+
+      return {
+        ...item,
+        url: sanitizedUrl
+      };
+    });
+
+    return res.status(200).json(enhancedData);
+
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
 }
