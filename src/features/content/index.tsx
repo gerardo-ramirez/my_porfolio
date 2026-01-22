@@ -1,80 +1,52 @@
-import { useEffect, useState } from "react";
+import { createClient } from '@supabase/supabase-js';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-export const Content = () => {
-  const [data, setData] = useState([]);
-
-  useEffect(() => {
-    // TÉCNICA 1: Rompemos el caché (304) agregando un timestamp a la petición del BFF
-    const nocache = `?t=${new Date().getTime()}`;
-    fetch("/api/content" + nocache)
-      .then((res) => res.json())
-      .then((json) => setData(json))
-      .catch((err) => console.error("Error llamando al BFF:", err));
-  }, []);
-
-  return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold uppercase tracking-tighter">Creative Lab Content</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {data.map((item: any) => (
-          <div key={item.id} className="group relative bg-secondary/20 rounded-2xl border border-white/10 overflow-hidden hover:border-primary/50 transition-all">
-            
-            {/* VIDEO */}
-            {item.type === 'youtube' && (
-              <div className="aspect-video w-full">
-                <iframe
-                  src={`https://www.youtube.com/embed/${item.external_id}`}
-                  title={item.title}
-                  className="w-full h-full"
-                  allowFullScreen
-                />
-              </div>
-            )}
-
-            {/* AUDIO */}
-            {item.type === 'audio' && (
-              <div className="p-6">
-                <img 
-                  src={item.thumbnail_url} 
-                  alt={item.title}
-                  className="w-full h-48 object-cover rounded-xl mb-4 shadow-lg"
-                  // No ponemos crossOrigin aquí si viene de Unsplash (ellos lo manejan distinto)
-                />
-                <audio controls className="w-full h-8" crossOrigin="anonymous">
-                  {/* TÉCNICA 2: El trim() ya lo hace el BFF, pero aquí nos aseguramos */}
-                  <source src={item.url?.trim()} type="audio/mpeg" />
-                </audio>
-              </div>
-            )}
-
-            {/* IMAGE - AQUÍ ESTÁ EL AJUSTE CRÍTICO */}
-            {item.type === 'image' && (
-              <div className="w-full overflow-hidden aspect-square">
-                <img 
-                  // TÉCNICA 3: Quitamos crossOrigin="anonymous" temporalmente. 
-                  // A veces Supabase público rebota el header si el bucket no tiene configurado CORS explícito.
-                  src={item.url?.trim()} 
-                  alt={item.title}
-                  loading="lazy"
-                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-500 cursor-pointer"
-                  onError={(e) => {
-                    // Fallback visual si la imagen falla
-                    (e.target as HTMLImageElement).src = "https://placehold.co/600x400/000000/FFFFFF/png?text=Error+Cargando+Imagen";
-                  }}
-                />
-              </div>
-            )}
-
-            <div className="p-4">
-              <h3 className="text-lg font-bold text-white">{item.title}</h3>
-              <p className="text-sm text-gray-400 mt-2 line-clamp-2">
-                {item.description || "Análisis creativo en proceso..."}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+// 1. Definimos los headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
 };
+
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL || '',
+  process.env.VITE_SUPABASE_ANON_KEY || ''
+);
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  
+  // 2. Manejo del OPTIONS (Preflight)
+  if (req.method === 'OPTIONS') {
+    // En Vercel Response se usa setHeader uno por uno
+    Object.entries(corsHeaders).forEach(([key, value]) => res.setHeader(key, value));
+    return res.status(200).send('ok');
+  }
+
+  try {
+    // 3. Aplicamos headers a la respuesta final
+    Object.entries(corsHeaders).forEach(([key, value]) => res.setHeader(key, value));
+
+    const { data, error } = await supabase.from('content').select('*');
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const enhancedData = data.map(item => {
+      const sanitizedUrl = item.url ? encodeURI(item.url.trim()) : null;
+
+      if (item.type === 'youtube') {
+        return {
+          ...item,
+          url: sanitizedUrl,
+          thumbnail: `https://img.youtube.com/vi/${item.external_id}/hqdefault.jpg`
+        };
+      }
+
+      return { ...item, url: sanitizedUrl };
+    });
+
+    return res.status(200).json(enhancedData);
+
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+}
